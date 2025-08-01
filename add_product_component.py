@@ -1,14 +1,34 @@
 
-from  flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sqlalchemy import create_engine
 import pandas as pd
 from io import BytesIO
 import pymysql
+import requests
 
 engine = None
 app = Flask(__name__)
-CORS(app)
+# Cấu hình CORS cho ứng dụng Flask
+# supports_credentials=True nếu ko có thì sẽ không gửi được cookie từ frontend sang backend
+# tuy mình ko xài cookie nhưng api mình gửi lên có cookie để dùng cho spring boot
+CORS(app, supports_credentials=True)
+
+# 1. khi người dùng upload file lên thì sẽ gửi request lên backend springBoot (verify_token)
+# để xác thực xem có phải là admin hay không
+# 2. nếu xác thực thành công thì mới cho phép upload file lên
+
+# URL của endpoint Spring Boot dùng để xác thực người dùng trước khi upload file
+AUTH_URL = "http://localhost:8080/api/admin/addComponentProductFile"
+def verify_token(token):
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        response = requests.get(AUTH_URL, headers=headers)
+        if response.status_code == 200 and response.json().get("status") == "success":
+            return True
+        return False
+    except requests.RequestException:
+        return False
 
 def init_database():
     # Trong Python, khi gán giá trị cho biến trong hàm, mặc định nó sẽ tạo biến cục bộ
@@ -22,6 +42,18 @@ def init_database():
 def add_component():
     try:
         # print("request:", request.files)
+
+        token = request.headers.get('Authorization')
+        if not token or not token.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid token"}), 401
+
+        token = token.replace("Bearer ", "")
+
+        # print("token:", token)
+
+        # Xác thực token qua Spring Boot
+        if not verify_token(token):
+            return jsonify({"error": "Unauthorized access"}), 401
 
         # Kiểm tra file nếu không có file nào được gửi lên trả về lỗi
         if 'file' not in request.files:
@@ -71,7 +103,7 @@ def add_component():
         (df[['component_name', 'component_type', 'component_active']]
          .to_sql('component', engine, if_exists='append', index=False))
 
-        return {"message": "Thêm dữ liệu thành công"}, 200
+        return {"status": 200}, 200
 
     except Exception as e:
         return {"error": str(e)}, 500
@@ -82,6 +114,18 @@ def add_product():
         # print("request:", request.files)
         #ở đây trước khi thực hiện thì mình sẽ gửi request lên backend springBoot
         # để xác thực xem có phải là admin hay không (chỉ cần tạo 1 route để xác thực thôi)
+
+        token = request.headers.get('Authorization')
+        if not token or not token.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid token"}), 401
+
+        token = token.replace("Bearer ", "")
+
+        # print("token:", token)
+
+        # Xác thực token qua Spring Boot
+        if not verify_token(token):
+            return jsonify({"error": "Unauthorized access"}), 401
 
         # Kiểm tra file nếu không có file nào được gửi lên trả về lỗi
         if 'file' not in request.files:
@@ -245,7 +289,7 @@ def add_product():
         finally:
             # đóng con trỏ để giải phóng tài nguyên
             connection.close()
-        return {"message": "ok"}, 200
+        return {"status": 200}, 200
 
     except Exception as e:
         return {"error": str(e)}, 500
