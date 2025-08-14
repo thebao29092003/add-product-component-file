@@ -12,7 +12,7 @@ app = Flask(__name__)
 # Cấu hình CORS cho ứng dụng Flask
 # supports_credentials=True nếu ko có thì sẽ không gửi được cookie từ frontend sang backend
 # tuy mình ko xài cookie nhưng api mình gửi lên có cookie để dùng cho spring boot
-CORS(app, supports_credentials=True)
+CORS(app,origins="http://localhost:5173", supports_credentials=True)
 
 # 1. khi người dùng upload file lên thì sẽ gửi request lên backend springBoot (verify_token)
 # để xác thực xem có phải là admin hay không
@@ -23,6 +23,7 @@ AUTH_URL = "http://localhost:8080/api/admin/addComponentProductFile"
 def verify_token(token):
     headers = {"Authorization": f"Bearer {token}"}
     try:
+        # gọi api đến spring boot để xác thực token
         response = requests.get(AUTH_URL, headers=headers)
         if response.status_code == 200 and response.json().get("status") == "success":
             return True
@@ -77,7 +78,7 @@ def add_component():
                 }
             )
 
-            # Kiểm tra cột cần thiết nếu không có cột nào trong DataFrame trả về lỗi
+        # Kiểm tra cột cần thiết nếu không có cột nào trong DataFrame trả về lỗi
         if (
                 'component_name' not in df.columns
                 or 'component_type' not in df.columns
